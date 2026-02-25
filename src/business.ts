@@ -1,4 +1,3 @@
-import { insertOrder } from './util/mysql';
 import { Bn } from './client/Bn';
 import { ChainService } from './chain/ChainService';
 import { logger } from './util/logger';
@@ -117,19 +116,6 @@ export class TradeManager {
       chain.tokenAmount.toString()
     );
     // logger.info('Order created successfully:', { order });
-
-    // try {
-    //   await insertOrder(
-    //     receipt.hash,
-    //     "bsc",
-    //     "bn",
-    //     order.result.orderId,
-    //     "arbitrage",
-    //     chain.category === "spot"
-    //   );
-    // } catch (error) {
-    //   logger.error({ err: error }, "Failed to insert order into database");
-    // }
   }
 
   public async process(chain: ChainConfig): Promise<void> {

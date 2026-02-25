@@ -6,10 +6,6 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn src/index.ts",
-    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
   },
   "keywords": [],
   "author": "",

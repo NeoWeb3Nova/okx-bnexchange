@@ -1,56 +1,34 @@
 import dotenv from 'dotenv';
+import { ArbitrageRadar } from './scanner/Radar';
+import { ScannerConfig } from './scanner/types';
+
 dotenv.config();
-import { config } from './config';
-import { Bn } from './client/Bn';
-import { ChainService } from './chain/ChainService';
-import { TradeManager, ChainConfig } from './business';
-import { logger } from './util/logger';
 
-const bn = new Bn();
-const chainService = new ChainService();
-const tradeManager = new TradeManager(
-  bn,
-  chainService,
-  config.maxSellAmount,
-  config.maxTradeFee,
-  config.balanceSafetyFactor
-);
+console.log('\n========================================================================================================================');
+console.log('⚡ OKX-CEX CROSS-MARKET ARBITRAGE SYSTEM (QUANT RADAR & EXECUTION ENGINE)');
+console.log('========================================================================================================================\n');
 
-async function once(chain: ChainConfig) {
-  try {
-    await tradeManager.process(chain);
-  } catch (error) {
-    logger.error(
-      { err: error },
-      `Error processing record for ${chain.tokenSymbol}`
-    );
-  }
-}
+const chainId = 56;
+const minSpreadPct = parseFloat(process.env.MIN_SPREAD_PCT || '0.5');
+const refreshIntervalSec = parseInt(process.env.REFRESH_INTERVAL_SEC || '20', 10);
+
+const config: ScannerConfig = {
+  chainId,
+  chainName: 'BNB Chain (BSC)',
+  minSpreadPct,
+  refreshIntervalSec,
+  topCount: 50,
+  proxyUrl: process.env.https_proxy || process.env.HTTP_PROXY,
+  manualWatchlist: ['BULLA', 'USELESS', 'AKE', 'XPIN', 'MARSCOIN'],
+  testSizesUsd: [500, 1000],
+};
 
 async function main() {
-  try {
-    await chainService.loadCaChe(config.chain as ChainConfig[]);
-    logger.info('Starting trading bot...');
-
-    // Use a more robust loop with Promise.allSettled
-    while (true) {
-      const results = await Promise.allSettled(
-        config.chain.map((chain) => once(chain as ChainConfig))
-      );
-
-      results.forEach((result) => {
-        if (result.status === 'rejected') {
-          logger.error({ err: result.reason }, 'A trade task failed');
-        }
-      });
-
-      // Optional: Add a delay to prevent high CPU usage in a tight loop
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1-second delay
-    }
-  } catch (error) {
-    logger.fatal({ err: error }, 'Failed to start trading bot');
-    process.exit(1);
-  }
+  const radar = new ArbitrageRadar(config);
+  await radar.startLoop();
 }
 
-main();
+main().catch(err => {
+  console.error('Fatal error in application:', err);
+  process.exit(1);
+});

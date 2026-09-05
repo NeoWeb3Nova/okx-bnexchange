@@ -11,7 +11,9 @@
     "paper": "ts-node src/runPaperTrader.ts",
     "paper:once": "ts-node src/runPaperTrader.ts --once",
     "executor": "ts-node src/runExecutor.ts",
-    "executor:once": "ts-node src/runExecutor.ts --once"
+    "executor:once": "ts-node src/runExecutor.ts --once",
+    "ui": "ts-node src/runWeb.ts",
+    "web": "ts-node src/runWeb.ts"
   },
   "keywords": [],
   "author": "",

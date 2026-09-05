@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ DEX-CEX 跨市场套利量化控制台 (Arbitrage Web Console)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .live-dot {
+      animation: pulse-dot 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Top Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg border border-emerald-500/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">DEX-CEX 套利量化控制台</h1>
+            <span class="text-xs bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded border border-emerald-500/30">BSC (56)</span>
+            <span class="text-xs bg-blue-500/20 text-blue-300 font-mono px-2 py-0.5 rounded border border-blue-500/30">v2.0</span>
+          </div>
+          <p class="text-xs text-slate-400">链上热点发现 · 盘口深度穿透 · 真实净利测算 · 影子回测</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 live-dot"></span>
+          <span id="connectionStatus" class="text-xs font-medium text-slate-300">实时连接正常</span>
+        </div>
+
+        <button id="btnScanNow" onclick="triggerManualScan()" class="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-lg shadow-emerald-900/30 transition flex items-center space-x-1.5">
+          <svg id="scanSpinner" class="w-4 h-4 hidden animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span id="scanBtnText">⚡ 立即扫描</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-400 font-medium">全链监控标的</div>
+        <div id="statTotalTokens" class="text-2xl font-bold font-mono text-white mt-1">--</div>
+        <div class="text-[11px] text-slate-500 mt-1">BSC 链上交易量前 50</div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-400 font-medium">已匹配 CEX 现货</div>
+        <div id="statCexTokens" class="text-2xl font-bold font-mono text-cyan-400 mt-1">--</div>
+        <div class="text-[11px] text-slate-500 mt-1">币安 / Gate / OKX</div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-400 font-medium">当前有效套利机会</div>
+        <div id="statActiveOpps" class="text-2xl font-bold font-mono text-emerald-400 mt-1">--</div>
+        <div class="text-[11px] text-slate-500 mt-1">利差 >= 0.5%</div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-400 font-medium">影子实盘累计净收益</div>
+        <div id="statTotalPnl" class="text-2xl font-bold font-mono text-emerald-400 mt-1">$0.00</div>
+        <div id="statWinRate" class="text-[11px] text-slate-400 mt-1">胜率: --% (0笔)</div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-400 font-medium">平均出块滑点衰减</div>
+        <div id="statAvgDecay" class="text-2xl font-bold font-mono text-amber-400 mt-1">-$0.00</div>
+        <div class="text-[11px] text-slate-500 mt-1">2.5s 确认延迟损耗</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+      <div class="flex space-x-3">
+        <button onclick="switchTab('radar')" id="tabBtnRadar" class="text-sm font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          🎯 实时套利雷达与净利测算
+        </button>
+        <button onclick="switchTab('paper')" id="tabBtnPaper" class="text-sm font-semibold px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200">
+          📈 影子实盘账本与小票
+        </button>
+        <button onclick="switchTab('collisions')" id="tabBtnCollisions" class="text-sm font-semibold px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center space-x-1.5">
+          <span>⚠️ 假币与重名隔离区</span>
+          <span id="badgeCollisionCount" class="text-xs bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full font-mono">0</span>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 font-mono" id="lastUpdatedText">
+        等待首次扫描...
+      </div>
+    </div>
+
+    <!-- TAB 1: Radar & Depth Profit Analysis -->
+    <div id="tabContentRadar" class="space-y-6">
+      
+      <!-- Realistic Opportunities Table -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800/80 flex justify-between items-center bg-slate-900/40">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center space-x-2">
+              <span>🎯 真实套利候选池 (利差 0.5% ~ 25%)</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">自动匹配各 CEX 最优买一卖一及交易方向</p>
+          </div>
+          <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">双向盘口</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950/60 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3">#</th>
+                <th class="px-4 py-3">代币 (Token)</th>
+                <th class="px-4 py-3">合约地址</th>
+                <th class="px-4 py-3 text-right">DEX 链上标价</th>
+                <th class="px-4 py-3">匹配 CEX</th>
+                <th class="px-4 py-3 text-right">CEX 买一 (Bid)</th>
+                <th class="px-4 py-3 text-right">CEX 卖一 (Ask)</th>
+                <th class="px-4 py-3 text-right">毛价差</th>
+                <th class="px-4 py-3">套利对冲动作</th>
+              </tr>
+            </thead>
+            <tbody id="radarTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+              <tr>
+                <td colspan="9" class="px-4 py-8 text-center text-slate-500">正在获取最新行情...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Phase 2 Depth & Net Profit Table -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800/80 flex justify-between items-center bg-slate-900/40">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center space-x-2">
+              <span class="text-emerald-400">💰 二级真实可执行净利与深度测算 (Phase 2)</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">吃掉指定额度后的实际成交均价 (VWAP) 扣除 Gas/手续费/滑点后净收益</p>
+          </div>
+          <span class="text-xs bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded border border-emerald-500/20 font-mono">穿透撮合</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950/60 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3">代币</th>
+                <th class="px-4 py-3">交易所</th>
+                <th class="px-4 py-3 text-right">试算规模</th>
+                <th class="px-4 py-3 text-right">DEX 冲击滑点</th>
+                <th class="px-4 py-3 text-right">CEX 深度滑点</th>
+                <th class="px-4 py-3 text-right">摩擦费+Gas</th>
+                <th class="px-4 py-3 text-right">最终净利润 ($)</th>
+                <th class="px-4 py-3 text-right">净收益率 (%)</th>
+                <th class="px-4 py-3">执行评级</th>
+                <th class="px-4 py-3">诊断裁定</th>
+              </tr>
+            </thead>
+            <tbody id="profitTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+              <tr>
+                <td colspan="10" class="px-4 py-8 text-center text-slate-500">等待深度撮合数据...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Paper Trading Ledger -->
+    <div id="tabContentPaper" class="hidden space-y-6">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800/80 flex justify-between items-center bg-slate-900/40">
+          <div>
+            <h2 class="text-sm font-bold text-white">📈 影子实盘成交记录 (带 2.5s 确认延迟对抗)</h2>
+            <p class="text-xs text-slate-400 mt-0.5">保存在本地 data/paper_trades.json 中</p>
+          </div>
+          <span class="text-xs bg-blue-500/10 text-blue-300 px-2.5 py-1 rounded border border-blue-500/20 font-mono">2.5s 出块模拟</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950/60 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3">订单 ID</th>
+                <th class="px-4 py-3">触发时间</th>
+                <th class="px-4 py-3">代币 / 交易所</th>
+                <th class="px-4 py-3">方向</th>
+                <th class="px-4 py-3 text-right">规模</th>
+                <th class="px-4 py-3 text-right">初始预估净利</th>
+                <th class="px-4 py-3 text-right">出块后实际净利</th>
+                <th class="px-4 py-3 text-right">滑点衰减损耗</th>
+                <th class="px-4 py-3">状态</th>
+              </tr>
+            </thead>
+            <tbody id="paperTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+              <tr>
+                <td colspan="9" class="px-4 py-8 text-center text-slate-500">暂无影子交易记录</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Symbol Collisions -->
+    <div id="tabContentCollisions" class="hidden space-y-6">
+      <div class="bg-amber-950/20 border border-amber-900/40 rounded-xl overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-amber-900/30 bg-amber-950/30">
+          <h2 class="text-sm font-bold text-amber-300">⚠️ 假币 / 重名代币隔离预警 (利差 > 25%)</h2>
+          <p class="text-xs text-amber-400/80 mt-0.5">以下代币虽与 CEX 同名，但实际为不同合约或处于归零极端状态，系统已自动隔离，严禁盲目执行！</p>
+        </div>
+
+        <div class="p-5">
+          <div id="collisionsList" class="space-y-3 font-mono text-xs">
+            <p class="text-slate-500">暂无异常重名撞车记录。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    let currentData = null;
+
+    // Tab switcher
+    function switchTab(tab) {
+      document.getElementById('tabContentRadar').classList.toggle('hidden', tab !== 'radar');
+      document.getElementById('tabContentPaper').classList.toggle('hidden', tab !== 'paper');
+      document.getElementById('tabContentCollisions').classList.toggle('hidden', tab !== 'collisions');
+
+      const activeClasses = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+      const inactiveClasses = 'text-slate-400 hover:text-slate-200';
+
+      const setTabBtn = (id, active) => {
+        const el = document.getElementById(id);
+        el.className = `text-sm font-semibold px-3 py-1.5 rounded-lg transition ${active ? activeClasses : inactiveClasses}`;
+      };
+
+      setTabBtn('tabBtnRadar', tab === 'radar');
+      setTabBtn('tabBtnPaper', tab === 'paper');
+      setTabBtn('tabBtnCollisions', tab === 'collisions');
+    }
+
+    // Connect Server-Sent Events (SSE)
+    function initEventSource() {
+      const statusEl = document.getElementById('connectionStatus');
+      const evtSource = new EventSource('/api/events');
+
+      evtSource.onopen = () => {
+        statusEl.innerText = '实时推流中';
+        statusEl.className = 'text-xs font-medium text-emerald-300';
+      };
+
+      evtSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateDashboard(data);
+        } catch (e) {
+          console.error('Failed to parse SSE:', e);
+        }
+      };
+
+      evtSource.onerror = () => {
+        statusEl.innerText = '连接断开，正在重连...';
+        statusEl.className = 'text-xs font-medium text-amber-400';
+      };
+    }
+
+    // Manual Scan Trigger
+    async function triggerManualScan() {
+      const spinner = document.getElementById('scanSpinner');
+      const btnText = document.getElementById('scanBtnText');
+      const btn = document.getElementById('btnScanNow');
+
+      btn.disabled = true;
+      spinner.classList.remove('hidden');
+      btnText.innerText = '扫描中...';
+
+      try {
+        const res = await fetch('/api/scan', { method: 'POST' });
+        const data = await res.json();
+        updateDashboard(data);
+      } catch (e) {
+        alert('扫描请求失败: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+        btnText.innerText = '⚡ 立即扫描';
+      }
+    }
+
+    function formatPrice(p) {
+      if (!p) return '0.00';
+      if (p >= 100) return p.toFixed(2);
+      if (p >= 1) return p.toFixed(4);
+      if (p >= 0.01) return p.toFixed(5);
+      if (p >= 0.0001) return p.toFixed(7);
+      return p.toExponential(3);
+    }
+
+    function formatAddr(addr) {
+      if (!addr || addr.length < 10) return addr || '';
+      return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+    }
+
+    // Render Data into DOM
+    function updateDashboard(data) {
+      currentData = data;
+      const { opportunities = [], profitAnalyses = [], paperTrades = [], paperSummary, lastScanTime } = data;
+
+      // Stats
+      document.getElementById('statTotalTokens').innerText = data.totalScanned || '40+';
+      document.getElementById('statCexTokens').innerText = data.cexMatched || '28';
+      
+      const realisticOpps = opportunities.filter(o => o.grossSpreadPct <= 25);
+      const suspiciousOpps = opportunities.filter(o => o.grossSpreadPct > 25);
+      
+      document.getElementById('statActiveOpps').innerText = realisticOpps.length;
+      document.getElementById('badgeCollisionCount').innerText = suspiciousOpps.length;
+
+      if (paperSummary) {
+        document.getElementById('statTotalPnl').innerText = `${paperSummary.totalNetProfitUsd >= 0 ? '+' : ''}$${paperSummary.totalNetProfitUsd}`;
+        document.getElementById('statWinRate').innerText = `胜率: ${paperSummary.winRatePct}% (${paperSummary.totalTrades}笔)`;
+        document.getElementById('statAvgDecay').innerText = `-$${paperSummary.avgLatencyDecayUsd}`;
+      }
+
+      document.getElementById('lastUpdatedText').innerText = `最后刷新: ${new Date(lastScanTime || Date.now()).toLocaleTimeString()}`;
+
+      // Render Radar Table
+      const radarBody = document.getElementById('radarTableBody');
+      if (realisticOpps.length === 0) {
+        radarBody.innerHTML = `<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">本轮未发现利差 >= 0.5% 的标的，持续监控中...</td></tr>`;
+      } else {
+        radarBody.innerHTML = realisticOpps.map((opp, idx) => {
+          const actionText = opp.direction === 'DEX_SELL_CEX_BUY'
+            ? `<span class="text-emerald-400 font-semibold">[DEX卖出]</span> ➜ <span class="text-cyan-400">[${opp.cexPrice.exchange.toUpperCase()}买回]</span>`
+            : `<span class="text-blue-400 font-semibold">[DEX买入]</span> ➜ <span class="text-amber-400">[${opp.cexPrice.exchange.toUpperCase()}卖出]</span>`;
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-4 py-3 text-slate-500">${idx + 1}</td>
+              <td class="px-4 py-3 font-bold text-white">${opp.token.symbol}</td>
+              <td class="px-4 py-3">
+                <a href="https://bscscan.com/token/${opp.token.contractAddress}" target="_blank" class="text-slate-400 hover:text-emerald-400 underline decoration-slate-600">
+                  ${formatAddr(opp.token.contractAddress)}
+                </a>
+              </td>
+              <td class="px-4 py-3 text-right font-semibold">$${formatPrice(opp.dexPriceUsd)}</td>
+              <td class="px-4 py-3">
+                <span class="bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/20 text-[11px]">
+                  ${opp.cexPrice.exchange.toUpperCase()}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right text-slate-300">$${formatPrice(opp.cexPrice.bid)}</td>
+              <td class="px-4 py-3 text-right text-slate-300">$${formatPrice(opp.cexPrice.ask)}</td>
+              <td class="px-4 py-3 text-right font-bold text-emerald-400">+${opp.grossSpreadPct}%</td>
+              <td class="px-4 py-3 text-xs">${actionText}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Phase 2 Profit Table
+      const profitBody = document.getElementById('profitTableBody');
+      if (profitAnalyses.length === 0) {
+        profitBody.innerHTML = `<tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">等待深度评估...</td></tr>`;
+      } else {
+        profitBody.innerHTML = profitAnalyses.map(p => {
+          let statusBadge = '';
+          if (p.status === 'PROFITABLE') {
+            statusBadge = '<span class="bg-emerald-500/15 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-semibold">推荐执行</span>';
+          } else if (p.status === 'MARGINAL') {
+            statusBadge = '<span class="bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">微利薄冰</span>';
+          } else if (p.status === 'INSUFFICIENT_DEPTH') {
+            statusBadge = '<span class="bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">深度不足</span>';
+          } else {
+            statusBadge = '<span class="bg-rose-500/15 text-rose-300 px-2 py-0.5 rounded border border-rose-500/30">不建议</span>';
+          }
+
+          const sign = p.netProfitUsd >= 0 ? '+' : '';
+          const pnlColor = p.netProfitUsd >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-4 py-3 font-bold text-white">${p.tokenSymbol}</td>
+              <td class="px-4 py-3 text-slate-300">${p.exchange}</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-200">$${p.tradeSizeUsd}</td>
+              <td class="px-4 py-3 text-right text-slate-400">-${p.dexPriceImpactPct}%</td>
+              <td class="px-4 py-3 text-right text-slate-400">-${p.cexDepthSlippagePct}%</td>
+              <td class="px-4 py-3 text-right text-slate-400">$${p.totalFrictionUsd}</td>
+              <td class="px-4 py-3 text-right ${pnlColor}">${sign}$${p.netProfitUsd}</td>
+              <td class="px-4 py-3 text-right ${pnlColor}">${sign}${p.netProfitPct}%</td>
+              <td class="px-4 py-3">${statusBadge}</td>
+              <td class="px-4 py-3 text-slate-400 text-[11px]">${p.summary}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Paper Trades Table
+      const paperBody = document.getElementById('paperTableBody');
+      if (!paperTrades || paperTrades.length === 0) {
+        paperBody.innerHTML = `<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">暂无模拟交易记录</td></tr>`;
+      } else {
+        paperBody.innerHTML = paperTrades.slice(-15).reverse().map(t => {
+          const sign = t.realizedNetProfitUsd >= 0 ? '+' : '';
+          const pnlColor = t.realizedNetProfitUsd >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-4 py-3 font-mono text-slate-400">${t.id}</td>
+              <td class="px-4 py-3 text-slate-400">${new Date(t.triggeredAt).toLocaleTimeString()}</td>
+              <td class="px-4 py-3 font-bold text-white">${t.tokenSymbol} (${t.exchange})</td>
+              <td class="px-4 py-3 text-slate-300 text-xs">${t.direction === 'DEX_SELL_CEX_BUY' ? 'DEX卖/CEX买' : 'DEX买/CEX卖'}</td>
+              <td class="px-4 py-3 text-right font-semibold">$${t.sizeUsd}</td>
+              <td class="px-4 py-3 text-right text-slate-400">+$${t.triggerNetProfitUsd}</td>
+              <td class="px-4 py-3 text-right ${pnlColor}">${sign}$${t.realizedNetProfitUsd} (${sign}${t.realizedNetProfitPct}%)</td>
+              <td class="px-4 py-3 text-right text-amber-400">-$${t.latencyDecayUsd}</td>
+              <td class="px-4 py-3">
+                <span class="${t.status === 'PROFITABLE' ? 'text-emerald-400' : 'text-rose-400'} font-semibold">
+                  ${t.status === 'PROFITABLE' ? '✅ 盈利成交' : '❌ 滑点击穿'}
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Collisions List
+      const collList = document.getElementById('collisionsList');
+      if (suspiciousOpps.length === 0) {
+        collList.innerHTML = `<p class="text-slate-500">本轮未检测到重名代币撞车。</p>`;
+      } else {
+        collList.innerHTML = suspiciousOpps.map(opp => `
+          <div class="p-3 bg-amber-900/10 border border-amber-900/30 rounded-lg flex items-center justify-between">
+            <div>
+              <span class="font-bold text-amber-200">${opp.token.symbol}</span>
+              <span class="text-slate-400 text-xs ml-2">合约: ${formatAddr(opp.token.contractAddress)}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-slate-400 text-xs">DEX: $${formatPrice(opp.dexPriceUsd)} vs ${opp.cexPrice.exchange.toUpperCase()}: $${formatPrice(opp.cexPrice.last)}</span>
+              <span class="text-amber-400 font-bold ml-3 text-xs">利差异常: +${opp.grossSpreadPct}% (自动隔离)</span>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Auto connect on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      initEventSource();
+      triggerManualScan(); // Fetch initial state
+    });
+  </script>
+</body>
+</html>
